@@ -1,6 +1,6 @@
 {
   "name": "archlet",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Generate an interactive, provenance-backed architecture map of a codebase into .archlet/ — layered modules, expand/collapse, PR diff overlays.",
   "type": "module",
   "bin": {
