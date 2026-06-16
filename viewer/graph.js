@@ -519,9 +519,205 @@
       const n = b.dataset.name; n ? selectDiff(n) : (clearDiff(), closeMenu());
     });
   }
-  btnDiffs.onclick = (e) => { e.stopPropagation(); menu.classList.contains('show') ? closeMenu() : openMenu(); };
-  document.addEventListener('click', () => { menu.classList.remove('show'); btnDiffs.classList.remove('on'); });
+  btnDiffs.onclick = (e) => {
+    e.stopPropagation();
+    if (menu.classList.contains('show')) {
+      closeMenu();
+    } else {
+      openMenu();
+      const exp = document.getElementById('export-dropdown');
+      if (exp) exp.classList.remove('show');
+    }
+  };
+  document.addEventListener('click', () => {
+    menu.classList.remove('show');
+    btnDiffs.classList.remove('on');
+    const exp = document.getElementById('export-dropdown');
+    if (exp) exp.classList.remove('show');
+  });
   if (!avail.length) btnDiffs.style.display = 'none';
+
+  // ── export controls ───────────────────────────────────────────────────────
+  const exportDropdown = document.getElementById('export-dropdown');
+  const btnExport = document.getElementById('btn-export');
+  if (btnExport && exportDropdown) {
+    btnExport.onclick = (e) => {
+      e.stopPropagation();
+      exportDropdown.classList.toggle('show');
+      closeMenu();
+    };
+
+    document.getElementById('export-svg').onclick = async (e) => {
+      e.stopPropagation();
+      exportDropdown.classList.remove('show');
+      await doExport('svg');
+    };
+
+    document.getElementById('export-png').onclick = async (e) => {
+      e.stopPropagation();
+      exportDropdown.classList.remove('show');
+      await doExport('png');
+    };
+
+    document.getElementById('export-pdf').onclick = (e) => {
+      e.stopPropagation();
+      exportDropdown.classList.remove('show');
+      window.print();
+    };
+  }
+
+  async function doExport(format) {
+    const svgEl = document.querySelector('svg');
+    if (!svgEl) return;
+
+    const btnExport = document.getElementById('btn-export');
+    const originalText = btnExport ? btnExport.textContent : 'Export ▼';
+    if (btnExport) {
+      btnExport.textContent = 'Exporting...';
+      btnExport.disabled = true;
+      btnExport.style.opacity = '0.6';
+      btnExport.style.cursor = 'not-allowed';
+    }
+
+    const restoreButton = () => {
+      if (btnExport) {
+        btnExport.textContent = originalText;
+        btnExport.disabled = false;
+        btnExport.style.opacity = '';
+        btnExport.style.cursor = '';
+      }
+    };
+
+    let url = null;
+    try {
+      const clone = svgEl.cloneNode(true);
+      let stylesText = '';
+      try {
+        const res = await fetch('styles.css');
+        stylesText = await res.text();
+      } catch (err) {
+        console.warn('[archlet] failed to fetch styles.css, exporting without custom styling', err);
+      }
+      let defs = clone.querySelector('defs');
+      if (!defs) {
+        defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        clone.insertBefore(defs, clone.firstChild);
+      }
+      const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+      styleEl.textContent = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;640;700&family=JetBrains+Mono:wght@400;700&display=swap');\n` + stylesText;
+      defs.appendChild(styleEl);
+      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      const gEl = svgEl.querySelector('g');
+      const bbox = gEl ? gEl.getBBox() : { x: 0, y: 0, width: 800, height: 600 };
+      const padding = 50;
+      const w = bbox.width + padding * 2;
+      const h = bbox.height + padding * 2;
+      clone.setAttribute('viewBox', `${bbox.x - padding} ${bbox.y - padding} ${w} ${h}`);
+      clone.setAttribute('width', w);
+      clone.setAttribute('height', h);
+      const serializer = new XMLSerializer();
+      const svgString = serializer.serializeToString(clone);
+      const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+      url = URL.createObjectURL(blob);
+
+      const now = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+      const filename = `${document.title.toLowerCase().replace(/[\s·]+/g, '-') || 'architecture-map'}-${timestamp}`;
+
+      if (format === 'svg') {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${filename}.svg`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        restoreButton();
+      } else if (format === 'png') {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            const scale = 2;
+            canvas.width = w * scale;
+            canvas.height = h * scale;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#f7f5ef';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.scale(scale, scale);
+            ctx.drawImage(img, 0, 0);
+            canvas.toBlob(pngBlob => {
+              if (!pngBlob) {
+                showToast('PNG export failed (canvas tainted). Downloading SVG instead.', true);
+                triggerSvgFallback(url, filename);
+                restoreButton();
+                return;
+              }
+              const pngUrl = URL.createObjectURL(pngBlob);
+              const a = document.createElement('a');
+              a.href = pngUrl;
+              a.download = `${filename}.png`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(pngUrl);
+              URL.revokeObjectURL(url);
+              restoreButton();
+            }, 'image/png');
+          } catch (blobErr) {
+            console.error('[archlet] canvas toBlob error', blobErr);
+            showToast('PNG export failed (canvas tainted). Downloading SVG instead.', true);
+            triggerSvgFallback(url, filename);
+            restoreButton();
+          }
+        };
+        img.onerror = (err) => {
+          console.error('[archlet] PNG render image error', err);
+          showToast('Failed to render PNG. Downloading SVG instead.', true);
+          triggerSvgFallback(url, filename);
+          restoreButton();
+        };
+        img.src = url;
+      }
+    } catch (err) {
+      console.error('[archlet] export failed', err);
+      showToast('Export failed: ' + err.message, true);
+      if (url) URL.revokeObjectURL(url);
+      restoreButton();
+    }
+  }
+
+  function triggerSvgFallback(url, filename) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filename}.svg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function showToast(message, isError = false) {
+    let toast = document.getElementById('toast-msg');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'toast-msg';
+      toast.className = 'toast';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    if (isError) {
+      toast.classList.add('error');
+    } else {
+      toast.classList.remove('error');
+    }
+    toast.classList.add('show');
+    if (window.toastTimeout) clearTimeout(window.toastTimeout);
+    window.toastTimeout = setTimeout(() => {
+      toast.classList.remove('show');
+    }, 4500);
+  }
 
   // initial overlay: ?diff=<name> | ?pr=<n> | manifest default
   const q = new URLSearchParams(location.search);

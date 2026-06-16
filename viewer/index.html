@@ -15,6 +15,15 @@
   <button id="btn-expand">Expand all</button>
   <button id="btn-freeze">Freeze</button>
   <button id="btn-reset">Reshuffle</button>
+  <div class="dropdown" id="export-dropdown">
+    <button id="btn-export" title="Export the current visual state of the map (WYSIWYG) as an image or PDF">Export ▼</button>
+    <div class="dropdown-content">
+      <button id="export-svg" title="Download the active map view as a scalable vector graphic (SVG)">Save as SVG</button>
+      <button id="export-png" title="Download the active map view as a high-resolution PNG image">Save as PNG</button>
+      <button id="export-pdf" title="Save the active map view as a PDF using the browser's print dialog">Save as PDF</button>
+      <div class="export-note">Captures current view state (WYSIWYG)</div>
+    </div>
+  </div>
 </div>
 
 <!-- legend rows are generated from the theme in graph.js -->
