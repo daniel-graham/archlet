@@ -612,6 +612,22 @@
       const padding = 50;
       const w = bbox.width + padding * 2;
       const h = bbox.height + padding * 2;
+
+      // Strip D3 active zoom/pan transform from the cloned container group
+      const clonedG = clone.querySelector('g');
+      if (clonedG) {
+        clonedG.removeAttribute('transform');
+      }
+
+      // Add a solid background rect with the theme color to prevent transparent/black fallback rendering
+      const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      bgRect.setAttribute('x', bbox.x - padding);
+      bgRect.setAttribute('y', bbox.y - padding);
+      bgRect.setAttribute('width', w);
+      bgRect.setAttribute('height', h);
+      bgRect.setAttribute('fill', '#f7f5ef');
+      clone.insertBefore(bgRect, clone.firstChild);
+
       clone.setAttribute('viewBox', `${bbox.x - padding} ${bbox.y - padding} ${w} ${h}`);
       clone.setAttribute('width', w);
       clone.setAttribute('height', h);
